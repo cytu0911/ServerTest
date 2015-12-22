@@ -97,11 +97,6 @@ class gamer
         $MODELS = include(ROOT.'/conf/rooms.php');
         $gameConfig = $MODELS[1];
 
-        //1 遍历每个房间，观察该房间排队人数是否达标
-       // $this->checkRoomQueue( $gameConfig );
-
-        //2 遍历每个牌桌，根据牌桌状态来执行不同操作
-        //$this->traveTables( $gameConfig );
     }
 
     private function checkRoomQueue($gameConfig)

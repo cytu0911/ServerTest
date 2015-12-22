@@ -289,10 +289,18 @@ class Server
         return $res;
     }
 
+    // 用户数据 设置
+    public function setUser( $uid, $data )
+    {
+        $data['uid'] = $uid;
+        $user = $this->getUser($uid);
+        $user_ = array_merge($data, $user);
+
+        return $this->gamer->userMgr->setUserInfo($uid,$user_);
+    }
     public function getUser($uid)
     {
         $userInfo = $this->gamer->userMgr->getUserInfo($uid);
-
         return $userInfo;
     }
 }
@@ -388,4 +396,14 @@ function getUser( $uid )
     if ( $uid < 1 ) return false;
     global $server;
     return $server->getUser($uid);
+}
+
+function setUser( $uid, $data )
+{
+    echo "setUser beg \n";
+    $uid = intval($uid);
+    if ( $uid < 1 || !is_array($data) || !$data ) return false;
+    global $server;
+    return $server->setUser($uid, $data);
+    echo "setUser end \n";
 }

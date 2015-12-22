@@ -11,6 +11,7 @@ class userMgr
 {
     public $redis = null;
     public $mysql = null;
+   // private $key_userinfo = "KEY_USERINFO";
 
     function __construct($rd, $mq)
     {
@@ -83,6 +84,5 @@ class userMgr
         $arrUser['tablePos']    = 0;
         $arrUser['fd']    = 0;
         $arrUser['isRobot']    = 0;
-
     }
 }
