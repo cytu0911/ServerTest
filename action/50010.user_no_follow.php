@@ -8,7 +8,7 @@ $seatId = $user['seatId'];
 $MODELS = include(ROOT.'/conf/rooms.php');
 if ( !in_array($roomId,array_keys($MODELS[$modelId])) || !$tableId )
 {
-	debug("不跟用户失效[$fd|$uid|$tableId|$seatId] roomId=$roomId");
+	//debug("不跟用户失效[$fd|$uid|$tableId|$seatId] roomId=$roomId");
 	goto end;
 }
 
@@ -16,13 +16,14 @@ if ( !in_array($roomId,array_keys($MODELS[$modelId])) || !$tableId )
 $table = $this->model->getTableInfo( $tableId );
 if ( !$table )
 {
-	debug("不跟牌桌失效[$fd|$uid|$tableId|$seatId]");
+	//debug("不跟牌桌失效[$fd|$uid|$tableId|$seatId]");
 	goto end;
 }
 //校验牌桌状态、席位轮流、用户托管
 elseif ( $table['state'] != 6 || $table['turnSeat'] != $seatId )
 {
-	debug("不跟网络延迟[$fd|$uid|$tableId|$seatId] state6=".$table['state']." turn".$table['turnSeat']."=".$seatId);
+	echo "state:". $table['state'] . "  turnSeat:".$table['turnSeat'] . "  seatId:". $seatId . "\n";
+	//debug("不跟网络延迟[$fd|$uid|$tableId|$seatId] state6=".$table['state']." turn".$table['turnSeat']."=".$seatId);
 	goto end;
 }
 //校验手牌

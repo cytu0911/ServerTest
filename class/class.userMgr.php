@@ -84,5 +84,39 @@ class userMgr
         $arrUser['tablePos']    = 0;
         $arrUser['fd']    = 0;
         $arrUser['isRobot']    = 0;
+        $arrUser['gameIds']    = array();
+    }
+
+    //判断用户是否报名了该场次比赛
+    public function hasSignUp($uid, $gameId)
+    {
+        $user =  getUser( $uid );
+        $Ids = $user['gameIds'];
+        return in_array( $gameId,$Ids );
+    }
+
+    //用户报名赛场
+    public function addGameId($uid ,$gameId)
+    {
+        $user =  getUser( $uid );
+        $Ids = $user['gameIds'];
+        $Ids[] = $gameId;
+        $gameids = array(
+            'gameIds' => $Ids
+        );
+        setUser($uid, $gameids );
+
+    }
+
+
+    public function delGameId($uid, $gameId)
+    {
+        $user =  getUser( $uid );
+        $Ids = $user['gameIds'];
+        unset( $Ids[ array_search($gameId,$Ids) ]  );
+        $gameids = array(
+            'gameIds' => $Ids
+        );
+        setUser($uid, $gameids );
     }
 }

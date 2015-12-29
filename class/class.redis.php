@@ -313,6 +313,28 @@ class RD
 		}
 	}
 
+	//删除整个hash表
+	function hdelTable($key)
+	{
+		$key = trim(strval($key));
+		if ( $key === '' ) return false;
+		try
+		{
+			$fields = $this->redis->hkeys($key);
+			if( $fields)
+			{
+				foreach($fields as $value)
+					$this->hdel($key, $value );
+			}
+
+		}
+		catch ( Exception $e)
+		{
+			return false;
+		}
+		return true;
+	}
+
 	function hdel($key, $field)
 	{
 		$key = trim(strval($key));

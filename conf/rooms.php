@@ -180,7 +180,7 @@ return $MODELS = array(
 			'gameOpenSetting' => array(	//开放时限判断
 				"2014-06-01 09:00:00|2018-06-31 23:30:00|1234567",//开始日期时间|结束日期时间|周n
 			),
-			'gamePersonAll' => 6,		//凑够人数后才开始
+			'gamePersonAll' => 3,		//凑够人数后才开始
 			'gameWinner' => 9,			//本场最多n人胜出
 			'gameRanknum' => 30,		//周赛榜单排名人数
 			'gameInCoins' => 20000,		//报名费
@@ -239,7 +239,7 @@ return $MODELS = array(
 			'gameOpenSetting' => array(	//开放时限判断
 				"2014-06-01 09:00:00|2018-06-31 23:30:00|1234567",//开始日期时间|结束日期时间|周n
 			),
-			'gamePersonAll' => 6,		//凑够人数后才开始
+			'gamePersonAll' => 3,		//凑够人数后才开始
 			'gameWinner' => 9,			//本场最多n人胜出
 			'gameRanknum' => 30,		//周赛榜单排名人数
 			'gameInCoins' => 50000,		//报名费

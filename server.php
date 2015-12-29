@@ -42,6 +42,8 @@ class Server
         $this->serv->on('Close', array($this, 'onClose'));
         $this->serv->on('WorkerStart', array($this, 'onWorkerStart'));
         $this->serv->on('pipeMessage',	array($this, 'onPipeMessage'));
+        $this->serv->on('Timer', array($this, 'onTimer'));
+        //$this->serv->on('ManagerStop', array($this, 'onManagerStop'));
         // bind callback
         $this->serv->on('Task', array($this, 'onTask'));
         $this->serv->on('Finish', array($this, 'onFinish'));
@@ -57,10 +59,23 @@ class Server
     {
         echo "Start\n";
     }
+
     public function onConnect( $serv, $fd, $from_id )
     {
         echo "workid: {$from_id}   Client {$fd} connect\n";
     }
+
+    public function onTimer($serv, $interval) {
+
+        switch( $interval ) {
+            case 10*1000:{
+                $this->gamer->TIMERM_10S_ROOMS();
+                break;
+            }
+
+        }
+    }
+
     public function onWorkerStart( $serv, $workid )
     {
         echo "workid: {$workid}   onWorkerStart\n";
@@ -75,6 +90,11 @@ class Server
         $this->mysql = $this->getMysql(1);
         $this->gamer = new gamer($this->redis, $this->mysql);
 
+
+        if( $workid == 0 )
+        {
+            $serv->addtimer(10*1000);
+        }
         //定时任务
         if( $workid < SW_WORKER_NUM)
         {
@@ -294,7 +314,7 @@ class Server
     {
         $data['uid'] = $uid;
         $user = $this->getUser($uid);
-        $user_ = array_merge($data, $user);
+        $user_ = array_merge($user ,$data );
 
         return $this->gamer->userMgr->setUserInfo($uid,$user_);
     }
@@ -405,5 +425,4 @@ function setUser( $uid, $data )
     if ( $uid < 1 || !is_array($data) || !$data ) return false;
     global $server;
     return $server->setUser($uid, $data);
-    echo "setUser end \n";
 }

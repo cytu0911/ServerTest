@@ -176,21 +176,6 @@ class model
 		$res = $this->redis->hdel($this->key_user_grabmail, $id);
 		return $mail;
 	}
-	public function delUserMail( $id )
-	{
-		return $this->redis->hdel($this->key_user_grabmail, $id);
-	}
-	public function updSurpriseRecord( $id, $uid )
-	{
-		$sql = "UPDATE lord_user_tesksurprise SET `uid` = $uid WHERE `id` = $id";
-		return $this->mysql->runSql($sql);
-	}
-	public function delSurpriseRecord( $id )
-	{
-		$sql = "DELETE FROM lord_user_tesksurprise WHERE `id` = $id";
-		return $this->mysql->runSql($sql);
-	}
-
 
 // 执行发送业务
 
@@ -430,75 +415,7 @@ class model
 		return false;
 	}
 
-	// 获取 默认在无redis数据时从数据库初始化数据
-	function getUserTask( $uid, $isInit=1 )
-	{
-		$uid = intval($uid);
-		if ( $uid <= 0 ) return array();
-		$dateid = intval(date("Ymd"));
-		$weekDay = date("N");//1-7
-		$usertask = $this->redis->hgetall($this->key_user_task_.$uid);
-		if (!$isInit) {
-			return ($usertask && is_array($usertask)) ? $usertask : array();
-		}
-		if (!$usertask) 
-		{
-			$usertask = $this->mysql->getLine("SELECT * FROM `lord_user_task` WHERE `uid` = $uid");
-			if (!$usertask) 
-			{
-				$res = $this->mysql->runSql("INSERT INTO `lord_user_task` ( `uid`, `dateid` ) VALUES ( $uid, ".intval(date("Ymd"))." )");
-				$usertask = $this->mysql->getLine("SELECT * FROM `lord_user_task` WHERE `uid` = $uid");
-			}
-			if ($usertask && is_array($usertask)) 
-			{
-				$usertask['dateid'] = $dateid;
-				foreach ( $usertask as $k => $v ) {
-					$usertask[$k] = intval($v);
-				}
-				$this->redis->hmset($this->key_user_task_.$uid,$usertask);
-			}
-		}
-		else
-		{
-			$olddateid = $usertask['login_this_dateid'];
-			$is_newday = intval($olddateid!=$dateid);
-			$is_neweek = intval($is_newday && !($olddateid>=($dateid-($weekDay-1)) && $olddateid<=($dateid+(7-$weekDay))));
-			if ($is_newday) 
-			{
-				$newu['lottery'] = 0;//重设抽奖次数
-				$res = setUser($uid,$newu);
-				$newut['login_day_times'] = 0;
-				$newut['gold_day'] = 0;
-				$newut['coupon_day'] = 0;
-				$newut['coins_day'] = 0;
-				$newut['normal_day_play'] = 0;
-				$newut['normal_day_win'] = 0;
-				$newut['normal_day_earn'] = 0;
-				$newut['normal_day_maxrate'] = 0;
-				$newut['normal_day_maxearn'] = 0;
-				$newut['match_day_play'] = 0;
-				$newut['match_day_point'] = 0;
-				$newut['lottery_day_times'] = 0;
-				if ($is_neweek) 
-				{
-					$newut['gold_week'] = 0;
-					$newut['coupon_week'] = 0;
-					$newut['coins_week'] = 0;
-					$newut['normal_week_play'] = 0;
-					$newut['normal_week_win'] = 0;
-					$newut['normal_week_earn'] = 0;
-					$newut['normal_week_maxrate'] = 0;
-					$newut['normal_week_maxearn'] = 0;
-					$newut['match_week_play'] = 0;
-					$newut['match_week_point'] = 0;
-					$newut['lottery_week_times'] = 0;
-				}
-				$res = $this->setUserTask($uid,$newut);
-				$usertask = array_merge($usertask,$newut);
-			}
-		}
-		return ($usertask && is_array($usertask)) ? $usertask : array();
-	}
+
 	// 设置
 	function setUserTask( $uid, $info )
 	{
@@ -552,11 +469,7 @@ class model
 		$res = bobSql($sql);
 		return $this->delUserTesk($uid);
 	}
-	// 删除
-	function delUserTesk( $uid )
-	{
-		// return $this->redis->del('lord_user_tesk_'.$uid);
-	}
+
 
 // 用户赛事信息
 
@@ -665,67 +578,7 @@ class model
 		$info = $this->mysql->getLine($sql);
 		return ( $info && is_array($info) ) ? $info : array();
 	}
-	//从数据库获取用户道具信息
-	function getDbUserDress( $uid )
-	{
-		$data = array('1'=>1);
-		$uid = intval($uid);
-		if ( $uid <= 0 ) return $data;
-		$sql = "SELECT * FROM `lord_game_userprop` WHERE `uid` = $uid AND `categoryId` = 1";
-		$props = $this->mysql->getData($sql);
-		if ( !$props || !is_array($props) ) return $data;
-		$data = array('1'=>0);
-		foreach ( $props as $k=>$v ) {
-			if ( $v['propState'] > 1 || ($v['propEnd'] > 0 && $v['propEnd'] < time()) ) {
-				$sql = "DELETE FROM `lord_game_userprop` WHERE `id` = ".$v['id'];
-				bobSql($sql);
-				continue;
-			}
-			$data[$v['propId']] = intval($v['propState']);
-		}
-		!in_array(1, $data) && $data['1'] = 1;
-		return $data;
-	}
-	//从数据库获取用户道具信息
-	function getDbUserItems($uid)
-	{
-		$data = array();
-		$uid = intval($uid);
-		if ( $uid <= 0 ) return $data;
-		$sql = "SELECT * FROM `lord_game_userprop` WHERE `uid` = $uid AND `categoryId` > 1";
-		$props = $this->mysql->getData($sql);
-		if ( !$props || !is_array($props) ) return $data;
-		foreach ( $props as $k=>$v )
-		{
-			if ( $v['propState'] > 1 || $v['num'] < 1 ) {
-				$sql = "DELETE FROM `lord_game_userprop` WHERE `id` = ".$v['id'];
-				bobSql($sql);
-				continue;
-			}
-			$data[$v['propId']]['id'] = $v['id'];
-			$data[$v['propId']]['propId'] = $v['propId'];
-			$data[$v['propId']]['num'] = isset($data[$v['propId']]['num']) ? ($data[$v['propId']]['num']+$num) : $num;
-			$data[$v['propId']]['state'] = intval($v['propState']);
-		}
-		return $data;
-	}
-	//到数据库设定用户道具穿戴信息
-	function setDbUserDress( $uid, $propId )
-	{
-		$uid = intval($uid);
-		$propId = intval($propId);
-		if ( $uid <= 0 || $propId <= 0 ) return false;
-		if ( $propId == 1 ) return true;
-		$sql = "SELECT * FROM `lord_game_userprop` WHERE `uid` = $uid AND `propId` = $propId";
-		$prop = $this->mysql->getLine($sql);
-		if ( !$prop || !is_array($prop) || $prop['categoryId'] != 1 || $prop['propState'] > 1 ) return false;
-		$sql = "UPDATE `lord_game_userprop` SET `propState` = 0 WHERE `categoryId` = 1 AND `uid` = $uid AND `propState` = 1";
-		bobSql($sql);
-		$id = $prop['id'];
-		$sql = "UPDATE `lord_game_userprop` SET `propState` = 1 WHERE `id` = $id";
-		bobSql($sql);
-		return true;
-	}
+
 	//存储用户滞留信息
 	function insUserMsg( $uid, $data )
 	{
@@ -829,101 +682,6 @@ class model
 			return bobSql($sql);
 		}
 	}
-	//执行用户奖励写入（含服装、道具）
-	function addUserPrize( $uid, $prize, $user=array(), $type=0 )
-	{
-		if ( !$uid || !$prize || !is_array($prize) )
-		{
-			return false;
-		}
-		$prize_ = $prize;
-		if(!isset($prize['gold'])) $prize['gold'] = 0;
-		if(!isset($prize['coins'])) $prize['coins'] = 0;
-		if(!isset($prize['coupon'])) $prize['coupon'] = 0;
-		if(!isset($prize['lottery'])) $prize['lottery'] = 0;
-		if(!isset($prize['propItems'])) $prize['propItems'] = array();
-		if(isset($prize['props'])) $prize['propItems'] = array_merge($prize['propItems'],$prize['props']);
-		if ( $user && isset($user['gold']) && isset($user['coins']) && isset($user['coupon']) && isset($user['lottery']) && isset($user['propDress']) && isset($user['propItems']) )
-		{
-			$adding = array();
-			$table_coinsadd = 0;
-			if ($prize['gold']) {
-				$adding['gold'] = $prize['gold'];
-			}
-			if ($prize['coins']) {
-				$adding['coins'] = $table_coinsadd = $prize['coins'];
-			}
-			if ($prize['coupon']) {
-				$adding['coupon'] = $prize['coupon'];
-			}
-			if ($prize['lottery']) {
-				$adding['lottery'] = $prize['lottery'];
-			}
-			$props = $prize['propItems'];//结构与其他竞技场时使用的不一样,这里是id=>num
-			if ( $props )
-			{
-				$newu['propDress'] = $user['propDress'];
-				$newu['propItems'] = $user['propItems'];
-				foreach ( $props as $k=>$v )
-				{
-					$id = $v['id'];
-					$num = $v['num'];
-					$categoryId = isset($v['categoryId']) ? intval($v['categoryId']) : 0;
-					if ( $categoryId == 1 ) {	//写入服装道具，叠加无效
-						if ( !isset($newu['propDress'][$id]) ) {
-							$newu['propDress'][$id] = 0;
-							$res = $this->addDbUserDress(array($uid=>array($id=>(isset($v['ext'])?$v['ext']:0)*($v['num']>0?$v['num']:1))));
-						}
-					} else {					//写入其他道具，叠加有效
-						$newu['propItems'][$id]['num'] = isset($newu['propItems'][$id]['num']) ? ($newu['propItems'][$id]['num'] + $num) : $num;
-						$res = $this->addDbUserItems(array($uid=>array($id=>$num)));
-					}
-				}
-				if ( !in_array(1,$newu['propDress']) )
-				{
-					$newu['propDress']["1"] = 1;
-				}
-				$res = setUser($uid, $newu);
-			}
-			if ( $user['tableId'] && $table_coinsadd ) {
-				//加事务锁
-				$lockId = $tableId = $user['tableId'];
-				$res = setLock($lockId);
-				$seatId = $user['seatId'];
-				$table = $this->getTableInfo($tableId);
-				if ( $table && isset($table["seat{$seatId}coins"]) ) {
-					$addT["seat{$seatId}coins"] = $table_coinsadd;
-					$addT && $this->incTableInfo($tableId, $addT);
-				}
-				$adding && $this->incUserInfo($uid, $adding, $type);
-				$res = delLock($lockId);
-			}
-			else{
-				$adding && $this->incUserInfo($uid, $adding, $type);
-			}
-		}
-		else 
-		{
-			if ( $prize['propItems'] )
-			{
-				foreach ( $prize['propItems'] as $k=>$v )
-				{
-					$id = $v['id'];
-					$num = $v['num'];
-					$categoryId = isset($v['categoryId']) ? intval($v['categoryId']) : 0;
-					if ( $categoryId == 1 )
-					{	//写入服装道具，叠加无效
-						$res = $this->addDbUserDress(array($uid=>array($id=>(isset($v['ext'])?$v['ext']:0)*($v['num']>0?$v['num']:1))));
-					} else {	//写入其他道具，叠加有效
-						$res = $this->addDbUserItems(array($uid=>array($id=>$num)));
-					}
-				}
-			}
-			$sql = "UPDATE `lord_game_user` SET `gold` = `gold` + ".$prize['gold'].", `coins` = `coins` + ".$prize['coins'].", `coupon` = `coupon` + ".$prize['coupon'].", `lottery` = `lottery` + ".$prize['lottery']." WHERE `uid` = $uid";
-			$res = bobSql($sql);
-		}
-		return $prize_;
-	}
 
 	//校验用户乐豆，用户是否可以发放补助的乐豆 返回发豆相关数据
 	function checkUserCoins( $uid, $user=array() )
@@ -980,61 +738,6 @@ class model
 		}
 		$user = array_merge($user,$data);
 		return $user;
-	}
-
-	// 获取用户抽奖记录
-	function getUserLottery( $uid )
-	{
-		$uid = max(intval($uid),0);
-		$dateid = intval(date("Ymd"));
-		$ut_now = time();
-		$ut_last = $ut_now - 7 * 86400;//一周内
-		$dt_now = date("Y-m-d H:i:s");
-		$list = $this->redis->get($this->key_user_lottery_.$uid);
-		if ($list) {
-			unset($list['0']);
-			return $list ? array_values($list) : array();
-		}
-		$data_lottery_prizes = array();
-		include(ROOT.'/include/data_lottery_prizes.php');
-		$prizes = $data_lottery_prizes;
-		$res = $this->mysql->getData("SELECT * FROM `lord_user_lotteryrecord` WHERE `uid` = $uid AND `ut_create` > $ut_last");
-		$list = array();
-		$res = ( $res && is_array($res) ) ? $res : array();
-		foreach ( $res as $k => $v )
-		{
-			if (!isset($prizes[$v['prizeid']])) continue;
-			$name = $prizes[$v['prizeid']]['name'];
-			$list[$v['ut_create']] = array('id'=>intval($v['id']), 'name'=>$name, 'datetime'=>date("Y-m-d H:i:s",$v['ut_create']), 'ut_create'=>$v['ut_create']);
-		}
-		if ($list) krsort($list);
-		$list = array_values(array_merge(array('0'=>array('id'=>0, 'name'=>'刷新时间', 'datetime'=>$dt_now, 'ut_create'=>$ut_now)),$list));
-		$res = $this->redis->set($this->key_user_lottery_.$uid,$list);
-		unset($list['0']);
-		return $list ? array_values($list) : array();
-	}
-
-	// 记录用户抽奖历史
-	function addUserLottery( $user, $prize )
-	{
-		$uid = max(intval($user['uid']),0);
-		$dateid = intval(date("Ymd"));
-		$ut_now = time();
-		$ut_last = $ut_now - 7 * 86400;//一周内
-		$dt_now = date("Y-m-d H:i:s");
-		$sql = "INSERT INTO `lord_user_lotteryrecord` "
-			." ( `dateid`, `uid`, `cool_num`, `nick`, `prizeid`, `cateid`, `gold`, `coins`, `coupon`, `propid`, `ut_create` ) VALUES "
-			." ( $dateid, $uid, ".$user['cool_num'].", '".mysqli_real_escape_string($this->mysql->db,$user['nick'])."', ".$prize['id'].", ".$prize['cateid'].", ".$prize['gold'].", ".$prize['coins'].", ".$prize['coupon'].", ".$prize['propid'].", $ut_now )";
-		bobSql($sql);
-		$id = intval($this->mysql->lastId());
-		$list = $this->getUserLottery($uid);
-		$list = array_values(array_merge(array('0'=>array('id'=>0, 'name'=>'刷新时间', 'datetime'=>$dt_now, 'ut_create'=>$ut_now),'1'=>array('id'=>$id, 'name'=>$prize['name'], 'datetime'=>$dt_now, 'ut_create'=>$ut_now)),$list));
-		foreach ( $list as $k => $v ) {
-			if ($v['ut_create'] < $ut_last) unset($list[$k]);
-		}
-		$list = $list ? array_values($list) : array();
-		$res = $this->redis->set($this->key_user_lottery_.$uid,$list);
-		return $res;
 	}
 
 
@@ -1180,17 +883,17 @@ class model
 		$table['lastSurprise'] = 0;
 		$table['create'] = $table['update'] = microtime(1);
 
+		//echo "players info \n";
+		//ar_dump($players);
 		foreach ( $players as $uid=>$user )
 		{
 			$user_ = $this->getUserInfo($uid);
-			var_dump($user_);
+			//var_dump($user_);
 
 			if ( $user_ && isset($user_['fd'])  ) {   // && $user_['fd']
 				$user = array_merge($user, $user_, array('isShowcard'=>false));
 				$fd = $user_['fd'];
 
-				echo "--------------------------------------\n";
-				var_dump($user_);
 			} else {
 				$user['fd'] = $fd = 0;
 			}
@@ -1645,6 +1348,7 @@ class model
 			'gameStart' => 0,
 			'gameCreate' => time(),
 		);
+
 		$game = array_merge($room,$week,$game);
 		$res = $this->redis->hset($this->key_model_games_.$modelId,$gamesId,$game);
 		if ( !$res )
@@ -2340,154 +2044,6 @@ class model
 		}
 		return true;
 	}
-	//写入用户服装道具
-	function addDbUserDress($prizeProps)
-	{
-		if ( !$prizeProps || !is_array($prizeProps) )
-		{
-			return false;
-		}
-		$now = time();
-		$propIds = $uids = array();
-		foreach ( $prizeProps as $uid=>$props )
-		{
-			$uids[$uid] = $uid;
-			foreach ( $props as $propId=>$name )
-			{
-				$propIds[$propId]=$propId;
-			}
-		}
-		$propList = $this->mysql->getData("SELECT * FROM `lord_game_prop` WHERE `state` = 0 AND `id` IN (".join(',',$propIds).")");
-		if ( !$propList )
-		{
-			return false;
-		}
-		$propIds = array();
-		$propList_ = $propList;
-		$propList = array();
-		foreach ( $propList_ as $k=>$v )
-		{
-			$propList[$v['id']]=$v;
-			$propIds[$v['id']]=$v['id'];
-		}
-		$userPropList = $this->mysql->getData("SELECT * FROM `lord_game_userprop` WHERE `propState` < 2 AND `uid` IN (".join(',',$uids).")");
-		$userPropList = $userPropList ? $userPropList : array();
-		$userProps = $userProps_ = array();
-		foreach ( $userPropList as $k=>$v )
-		{
-			$userProps[$v['uid']][] = $v;
-			$userProps_[$v['uid'].'_'.$v['propId']] = $v;
-		}
-		$data = $u_ = array();
-		foreach ( $prizeProps as $uid=>$props )
-		{
-			foreach ( $props as $propId=>$ext )
-			{
-				if ( !in_array($propId,$propIds) )
-				{
-					continue;
-				}
-				$data[$uid.'_'.$propId] = array(
-					'uid' => $uid,
-					'fromUid' => 0,//系统
-					'propId' => $propId,
-					'categoryId' => $propList[$propId]['categoryId'],
-					'propStart' => $now,
-					'propEnd' => (is_numeric($ext) && $ext > 0) ? ($now + $ext*86400) : ($propList[$propId]['valid'] ? ($now + intval($propList[$propId]['valid']*86400)) : 0),
-					'propState' => isset($userProps_[$uid.'_'.$propId])?$userProps_[$uid.'_'.$propId]['propState']:(isset($userProps[$uid])||in_array($uid,$u_) ? 0 : 1),//拥有//启用
-				);
-				$u_[]=$uid;
-			}
-		}
-		foreach ( $data as $k=>$v )
-		{
-			if ( isset($userProps_[$k]) )
-			{
-				bobSql("UPDATE `lord_game_userprop` SET `fromUid` = ".$v['fromUid'].", `propStart` = ".$v['propStart'].", `propEnd` = ".$v['propEnd'].", `propState` = ".$v['propState']." WHERE `id` = ".$userProps_[$k]['id']);
-			}
-			else
-			{	//优化，批量写入
-				bobSql("INSERT INTO `lord_game_userprop` ( `uid`, `fromUid`, `propId`, `categoryId`, `num`, `propStart`, `propEnd`, `propState` ) VALUES ( ".$v['uid'].", ".$v['fromUid'].", ".$v['propId'].", ".$v['categoryId'].", 1, ".$v['propStart'].", ".$v['propEnd'].", ".$v['propState']." )");
-			}
-		}
-		return true;
-	}
-	//写入用户其他道具
-	function addDbUserItems( $prizeProps )
-	{
-		if ( !$prizeProps || !is_array($prizeProps) )
-		{
-			return false;
-		}
-		$now = time();
-		$propIds = $uids = array();
-		foreach ( $prizeProps as $uid=>$props )
-		{
-			$uids[$uid] = $uid;
-			foreach ( $props as $propId=>$name )
-			{
-				$propIds[$propId]=$propId;
-			}
-		}
-		$propList = $this->mysql->getData("SELECT * FROM `lord_game_prop` WHERE `state` = 0 AND `id` IN (".join(',',$propIds).")");
-		if ( !$propList )
-		{
-			return false;
-		}
-		$propIds = array();
-		$propList_ = $propList;
-		$propList = array();
-		foreach ( $propList_ as $k=>$v )
-		{
-			$propList[$v['id']]=$v;
-			$propIds[$v['id']]=$v['id'];
-		}
-		$userPropList = $this->mysql->getData("SELECT * FROM `lord_game_userprop` WHERE `num` > 0 AND `propState` < 2 AND `uid` IN (".join(',',$uids).")");
-		$userPropList = $userPropList ? $userPropList : array();
-		$userProps = array();
-		foreach ( $userPropList as $k=>$v )
-		{
-			$userProps[$v['uid'].'_'.$v['propId']] = $v['id'];
-		}
-		$data = array();
-		foreach ( $prizeProps as $uid=>$props )
-		{
-			foreach ( $props as $propId=>$num )
-			{
-				if ( !in_array($propId,$propIds) )
-				{
-					continue;
-				}
-				if ( isset($userProps[$uid.'_'.$propId]) ) 
-				{
-					$id = $userProps[$uid.'_'.$propId];
-					$sql = "UPDATE `lord_game_userprop` SET `num` = `num` + 1 WHERE `propState` < 2 AND `id` = $id";
-					$res = $this->mysql->runSql($sql);
-					if ( $res ) {
-						continue;
-					}
-				}
-				$data[$uid.'_'.$propId] = array(
-					'uid' => $uid,
-					'fromUid' => 0,//系统
-					'propId' => $propId,
-					'categoryId' => $propList[$propId]['categoryId'],
-					'num' => $num,
-					'propStart' => 0,
-					'propEnd' => 0,
-					'propState' => 0,//拥有//启用
-				);
-			}
-		}
-		foreach ( $data as $k=>$v )
-		{	//优化，批量写入
-			$this->mysql->runSql("INSERT INTO `lord_game_userprop` ( `uid`, `fromUid`, `propId`, `categoryId`, `num`, `propStart`, `propEnd`, `propState` ) VALUES ( ".$v['uid'].", ".$v['fromUid'].", ".$v['propId'].", ".$v['categoryId'].", ".$v['num'].", ".$v['propStart'].", ".$v['propEnd'].", ".$v['propState']." )");
-		}
-		return true;
-	}
-
-
-
 
 	//获取-各种版本号
 	function getVersion( $name = "" )

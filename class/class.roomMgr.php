@@ -12,81 +12,45 @@ class roomMrg
     public $redis = null;
     public $mysql = null;
 
+    private $lord_model_room_conf = "lord_model_room_conf";
+
     function __construct( $rd, $mq )
     {
         $this->redis = $rd;
         $this->mysql = $mq;
     }
 
-    public function enRoll($roomId, $user_arr)
+    //获取所有房间配置
+    public function getRooms( )
     {
-        if( isset($user_arr['uid'])  )
+        $arr = $this->redis->hgetall($this->lord_model_room_conf);
+        if($arr)
         {
-            $key = "ROOM_QUEUE" . $roomId ;
-            $info['uid'] =$user_arr['uid'];
-            $this->redis->ladd($key,$info );
-            return $this->getNum( $roomId );
+            return $arr;
         }
-       return false;
-    }
+        $sql = "SELECT *FROM `lord_model_rooms` WHERE `isOpen` =1 LIMIT 0 , 30";
+        $arr = $this->mysql->getData($sql);
+        if( empty($arr) ) return false;
 
-    public function remRoom($roomId)
-    {
-        $key = "ROOM_QUEUE" . $roomId ;
-        $this->redis->lnot($key);
-    }
-
-    public function getNum( $roomId )
-    {
-        $key = "ROOM_QUEUE" . $roomId ;
-        return $this->redis->llen( $key );
-    }
-
-    public function popNum($roomId, $num )
-    {
-        $totalNum = $this->getNum($roomId);
-        if ($totalNum ==0 ) return false;
-        $ret = array();
-        $key = "ROOM_QUEUE" . $roomId ;
-        $num = $num > $totalNum ? $totalNum : $num;
-
-        for( $i =0 ; $i <$num; $i ++ )
+        foreach( $arr as $v )
         {
-            $ret[$i] = $this->redis->lpop($key);
+            $this->redis->hset($this->lord_model_room_conf, $v['roomId'],$v  );
+            $ret[ $v['roomId'] ] = $v;
         }
         return $ret;
     }
 
-    public function remRoomUser( $roomId, $user_arr )
+    //获取房间配置
+    public function getRoom( $roomId )
     {
-        if( isset($user_arr['uid'])  )
-        {
-            $key = "ROOM_QUEUE" . $roomId ;
-            $info['uid'] =$user_arr['uid'];
-            return $this->redis->ldel($key, json_encode( $info['uid'] ) );
-        }
-        return false;
+        return $this->redis->hget( $this->lord_model_room_conf,$roomId );
     }
 
 
-    public function setTable( $roomId,$gameId, $tableId, $table_arr )
+    //判断当前场次是否可报名
+    public function canSignUp( $roomId, $gameId  )
     {
-        $tname = "ROOM_TABLE" . $roomId . "_" . $gameId ;
-        return $this->redis->hset($tname,$tableId,$table_arr);
+        return true;
     }
-
-    public function  getTable( $roomId,$gameId, $tableId  )
-    {
-        $tname = "ROOM_TABLE" . $roomId . "_" . $gameId ;
-        return $this->redis->hget($tname,$tableId);
-    }
-
-    public function  getTables( $roomId, $gameId  )
-    {
-        $tname = "ROOM_TABLE" . $roomId . "_" . $gameId ;
-        return $this->redis->hgetall($tname);
-    }
-
-
 
 }
