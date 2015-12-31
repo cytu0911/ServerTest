@@ -43,7 +43,7 @@ class Server
         $this->serv->on('WorkerStart', array($this, 'onWorkerStart'));
         $this->serv->on('pipeMessage',	array($this, 'onPipeMessage'));
         $this->serv->on('Timer', array($this, 'onTimer'));
-        //$this->serv->on('ManagerStop', array($this, 'onManagerStop'));
+
         // bind callback
         $this->serv->on('Task', array($this, 'onTask'));
         $this->serv->on('Finish', array($this, 'onFinish'));
@@ -52,6 +52,50 @@ class Server
 
     public function onPipeMessage($ss, $src_wid, $data)
     {
+        $arrData = json_decode($data,1);
+        $act =  $arrData['act'];
+        $tick = $arrData['tick'];
+        $mtime = microtime(1);
+        switch ( $act)
+        {
+            case 'SCENE':
+            {
+                $events = $this->redis->hgetall($this->srv_timer_);//1000~2000
+                if ( !$events ) break;
+                $events_mtime = array();
+                foreach ( $events as $k => $v )
+                {
+                    $ntime = $v['mtime'] + $v['delay'] / 1000;
+                    $events[$k]['ntime'] = $events_mtime[$k] = $ntime;
+                }
+                array_multisort($events_mtime, $events);
+                foreach ( $events as $sceneId => $data )
+                {
+                    if ( $data['ntime'] > $mtime ) break;
+
+                    $lockId = $this->srv_lock_."SCENE".$sceneId;
+                    $res = $this->redis->setLock($lockId);
+                    if ( !$res ) {
+                        gerr("[LOCKON] W=$this->wid H=$this->hid lockid=$lockId data=".json_encode($data));
+                        continue;
+                    }
+                    $event = $this->redis->hget($this->srv_timer_, $sceneId);
+                    if ( !$event || $event['mtime'] != $data['mtime'] || $event['delay'] != $data['delay'] ) {
+                        $res = $this->redis->delLock($lockId);
+                        continue;
+                    }
+                    $res = $this->redis->hdel($this->srv_timer_, $sceneId);
+                    if ( $data['stop'] ) {
+                        $res = $this->redis->delLock($lockId);
+                        continue;
+                    }
+                    $res = $this->redis->delLock($lockId);
+                    $this->gamer->runEvent($data['act'],$data['params'] );
+                }
+                break;
+            }
+
+        }
 
     }
 
@@ -96,31 +140,14 @@ class Server
             $serv->addtimer(10*1000);
         }
         //定时任务
-        if( $workid < SW_WORKER_NUM)
+        if( $workid < SW_WORKER_NUM and $workid == 1  )
         {
-
-            $tick = 200;
-            $cb = function($timerId) {
-                while ( $data = $this->redis->lpop($this->srv_timer_ ) )
-                {
-                    $act = $data['act'];
-                    $delay = $data['delay'];
-                    $mtime = $data['mtime'];
-                    $nmtime = microtime(1);
-                    $emtime = intval($mtime * 1000 + $delay) / 1000;
-                    $delay = $emtime > $nmtime ? intval(($emtime - $nmtime) * 1000) : 0;
-                    if ( $delay ) {
-                        $cc = function() use ( $data ) {
-                            $this->gamer->runEvent($data['act'],$data['params'] );
-                        };
-                        swoole_timer_after($delay, $cc);
-                    } else {
-                        //$res = $this->sendServer($data['game_id'], 0, 8, 0, $data);//CME=8 内置事件
-                        $this->gamer->runEvent($act,$data['params'] );
-                    }
-                }
+            $tick = 300;
+            $cb = function($timerId, $tick){
+                $this->serv->sendMessage(json_encode(array('act'=>'SCENE', 'tick'=>$tick)), SW_WORKER_NUM + 0 );
             };
-            swoole_timer_tick($tick, $cb);
+            swoole_timer_tick($tick, $cb, $tick);
+
         }
 
     }
@@ -249,9 +276,7 @@ class Server
             gerr("[LOCKON] W=$this->wid H=$this->hid lockid=$lockId event=".json_encode($event));
             return false;
         }
-        //$res = $this->redis->hset($this->srv_timer_.$hostId, $sceneId, $event);
-
-        $res = $this->redis->ldda($this->srv_timer_, $event);
+        $res = $this->redis->hset($this->srv_timer_, $sceneId, $event);
 
         $res2= $this->redis->delLock($lockId);
 
@@ -273,7 +298,7 @@ class Server
             //gerr("[LOCKON] W=$this->wid H=$this->hid lockid=$lockId delay=$delay params=".json_encode($params));
             return false;
         }
-        $event = $this->redis->hget($this->srv_timer_.$hostId, $sceneId);
+        $event = $this->redis->hget($this->srv_timer_, $sceneId);
         if ( !$event ) {
             $this->redis->delLock($lockId);
             return false;
@@ -289,7 +314,7 @@ class Server
         }
         $event['delay'] = $delay;
         $event['mtime'] = microtime(1);
-        $res = $this->redis->hset($this->srv_timer_.$hostId, $sceneId, $event);
+        $res = $this->redis->hset($this->srv_timer_, $sceneId, $event);
         $res2= $this->redis->delLock($lockId);
         return $res;
     }
@@ -297,14 +322,13 @@ class Server
     // TIMER 删除一个场景轮次定时器事件
     public function delTimer( $sceneId, $hostId )
     {
-
         $lockId = $this->srv_lock_."SCENE".$sceneId;
         $res = $this->redis->setLock($lockId);
         if ( !$res ) {
-            //gerr("[LOCKON] W=$this->wid H=$this->hid lockid=$lockId hostid=".$hostId);
+            gerr("[LOCKON] W=$this->wid H=$this->hid lockid=$lockId hostid=".$hostId);
             return false;
         }
-        $res = $this->redis->hdel($this->srv_timer_.$hostId, $sceneId);
+        $res = $this->redis->hdel($this->srv_timer_, $sceneId);
         $res2= $this->redis->delLock($lockId);
         return $res;
     }

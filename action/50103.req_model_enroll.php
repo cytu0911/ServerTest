@@ -13,15 +13,16 @@ $weekId = intval(date("Ymd",time()-(date("N")-1)*86400));
 $now = time();
 
 //获取本周最新场次
-$game = $this->model->getModelRoomWeekGameLast($modelId,$roomId,$weekId);
-$gameId = isset($game["gamesId"]) ? $game["gamesId"] : "";
+//$game = $this->model->getModelRoomWeekGameLast($modelId,$roomId,$weekId);
+//$gameId = isset($game["gamesId"]) ? $game["gamesId"] : "";
 
-//判断用户是否报名了
+$game = $this->roomMgr->getModelRoomWeekGameLast($modelId,$roomId,$weekId);
+$gameId = isset($game["gamesId"]) ? $game["gamesId"] : "";
 $uid = isset($user["uid"]) ? $user["uid"] : "";
 
 echo "gameid " . $gameId . "\n";
-var_dump($user);
 
+//判断用户是否报名了
 $bHasSignUp =  $this->userMgr->hasSignUp($uid, $gameId) ;
 
 if( $bHasSignUp)
@@ -54,11 +55,11 @@ $res = sendToFd( $fd, $cmd, $code, $data);
 $MODELS = include(ROOT.'/conf/rooms.php');
 $gamePersonAll =  $MODELS[ $modelId ][$roomId]['gamePersonAll'];
 
-
 //加入报名
-
-$gameNew = $this->model->addModelGamePlay($game,$user);
+//$gameNew = $this->model->addModelGamePlay($game,$user);
+$gameNew = $this->roomMgr->addModelGamePlay($game,$user);
 $this->userMgr->addGameId($uid ,$gameNew["gamesId"]);
+
 
 echo "baoming  \n";
 echo $gameNew["gamePerson"] . "  / " . $gameNew["gamePersonAll"]. "\n";

@@ -36,7 +36,6 @@ class userMgr
         return $this->getUserInfo($uid);
     }
 
-
     public function getUidByFd($fd)
     {
         $tName = "FD_UID_TABLE" ;

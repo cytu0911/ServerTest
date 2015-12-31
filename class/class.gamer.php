@@ -143,43 +143,26 @@ class gamer
         $weekId = $game['weekId'];
         $gameId = $game['gameId'];
 
-        //$gameplayall = $this->model->getModelGamePlayAll( "1_1004_20151214_1");
-        $gameplayall = $this->model->getModelGamePlayAll($gamesId);
-        if ( !$gameplayall )
-        {
-            return false;
-        }
+        $gameplayall = $this->roomMgr->getModelGamePlayAll($gamesId);
+        if ( !$gameplayall ) { return false; }
 
-        //校验人数
-        if ( $game['gamePerson'] < $game['gamePersonAll'] )  //  || count($gameplayall) < $game['gamePersonAll']
-        {
-           // return false;
-        }
         //生成下一场
-        $newgame = $this->model->getModelRoomWeekGameLast($modelId,$roomId,$weekId,1,$gameId+1);
+        $newgame = $this->roomMgr->getModelRoomWeekGameLast($modelId,$roomId,$weekId,1,$gameId+1);
 
         if ( !$newgame )
         {
             gerr("赛场自增无效[$gamesId]client-".__LINE__."");
             return false;
         }
+        //检查玩家是否已经在其他比赛
+        foreach( $gameplayall as $u )
+        {
+            
+        }
         //踢出多余玩家
         $arr = array_chunk($gameplayall,$game['gamePersonAll'], true);
         $gameplay = $arr[0];
-        $kickouts = isset($arr[1])?$arr[1]:array();
-        foreach ( $kickouts as $k=>$v )
-        {
-            debug("赛场满员踢掉[$gamesId]client-".__LINE__."");
-            //删除参赛用户
-            $res = $this->model->delModelGamePlay($game,$v);
-            //通知用户: 报名人数满员
-            $uid = $v['uid'];
-            $code = 104;
-            $data['errno'] = 4;
-            $data['error'] = "报名人数满员，请等待下一场开放。\n报名费用已经返还到您的账户。";
-            $data['coins'] = $v['coins']+$game['gameInCoins'];
-            $res = $this->model->sendToUser( $uid, $cmd, $code, $data );
-        }
+
         //赛事赛场开始
         $game['gameStart'] = time();
         //保存赛场信息
@@ -1092,7 +1075,7 @@ class gamer
         $params = array('seatId'=>$seatId);
         $delay = $GAME['time_trust_play'] * 1000;
         $hostId = $table['hostId'];
-        //updTimer($sceneId, $params, $delay, $hostId);   //TODO
+        updTimer($sceneId, $params, $delay, $hostId);
         return $table;
     }
 
@@ -1247,7 +1230,7 @@ class gamer
     //事件 - 每10秒钟执行一次
     function TIMERM_10S_ROOMS()
     {
-        echo "TIMERM_10S_ROOMS \n";
+        //echo "TIMERM_10S_ROOMS \n";
         $MODELS = include(ROOT."/conf/rooms.php");
         $rooms = $MODELS['1'];
         // 遍历房间

@@ -1249,7 +1249,7 @@ class model
 		{
 			$games = $this->getModelGames($modelId);
 			$games = $games ? $games : array();
-
+			var_dump($games);
 			$game = array();
 			foreach ( $games as $k=>$v )
 			{
