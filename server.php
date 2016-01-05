@@ -338,9 +338,12 @@ class Server
     {
         $data['uid'] = $uid;
         $user = $this->getUser($uid);
-        $user_ = array_merge($user ,$data );
-
-        return $this->gamer->userMgr->setUserInfo($uid,$user_);
+        if( $user)
+        {
+            $user_ = array_merge($user ,$data );
+            return $this->gamer->userMgr->setUserInfo($uid,$user_);
+        }
+        return false;
     }
     public function getUser($uid)
     {
@@ -402,7 +405,7 @@ function setTimer($game_id, $sceneId, $act, $params, $delay, $hostId=null )
     $act = trim($act);
     $delay = intval($delay);
     $hostId = is_null($hostId) ? HOSTID : trim($hostId);
-    if ( empty($sceneId) || empty($hostId) || empty($act) || !is_array($params) ) return false;
+    if ( empty($sceneId) ||  empty($act) || !is_array($params) ) { echo "setTimer err\n"; return false;}
     global $server;
     return $server->setTimer($game_id, $sceneId, $act, $params, $delay, $hostId);
 }

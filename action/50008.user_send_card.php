@@ -22,7 +22,7 @@ if ( !in_array($roomId,array_keys($MODELS[$modelId])) || !$tableId )
 }
 
 //获取牌桌
-$table = $this->model->getTableInfo( $tableId );
+$table = $this->tableMgr->getTableInfo( $tableId );
 if ( !$table )
 {
 	debug("出牌牌桌失效[$fd|$uid|$tableId|$seatId] params=".json_encode($params));
@@ -46,7 +46,7 @@ if( $cardstype['type'] < 1)
 {
 	$code = 1020;//
 	$data = array();//['error']=>3,['msg']=>"[ERROR]牌型",['cardType']=>$cardstype['type'],['sendCards']=>$sendCards,
-	$res = $this->model->sendToUser( $user, $cmd, $code, $data );
+	$res = $this->tableMgr->sendToUser( $user, $cmd, $code, $data );
 	goto end;
 }
 //牌库检测
@@ -55,7 +55,7 @@ if ( array_diff( $sendCards, $hand) )
 {
 	$code = 1020;//
 	$data = array();//['error']=>1,['msg']=>"[ERROR]牌面",['sendCards']=>$sendCards,['playerCard']=>$hand,
-	$res = $this->model->sendToUser( $user, $cmd, $code, $data );
+	$res = $this->tableMgr->sendToUser( $user, $cmd, $code, $data );
 	goto end;
 }
 //大小检测	有前牌、非自己、且自己牌小
@@ -64,7 +64,7 @@ if( $table['lastCards'] && $table['lastCall'] != $seatId && $card->cardsCompare(
 {
 	$code = 1013;//
 	$data = array();//['error']=>2,['msg']=>"[ERROR]牌小",['sendCards']=>$sendCards,['lastCards']=>$table['lastCards'],
-	$res = $this->model->sendToUser( $user, $cmd, $code, $data );
+	$res = $this->tableMgr->sendToUser( $user, $cmd, $code, $data );
 	goto end;
 }
 
@@ -76,7 +76,7 @@ $data = array();
 $data['callId'] = $seatId;
 $data['sendCards'] = $sendCards;
 $data['cardType'] = intval( $cardstype['type'] );
-$res = $this->model->sendToTable( $table, $cmd, $code, $data, __LINE__ );
+$res = $this->tableMgr->sendToTable( $table, $cmd, $code, $data, __LINE__ );
 
 //检测牌型是否影响倍率
 $rate = isset( $GAME['rate_cardstype'.intval( $cardstype['type'])]) ? $GAME['rate_cardstype'.intval( $cardstype['type'])] : 1;
@@ -91,7 +91,7 @@ $new['seat'.$seatId.'cards'] = $table['seat'.$seatId.'cards'] = array_values(arr
 //记录出牌次数，用于春天/反春判定
 $new['seat'.$seatId.'sent'] = ++$table['seat'.$seatId.'sent'];
 //轮转下家
-$new['turnSeat'] = $table['turnSeat'] = $this->model->getSeatNext( $seatId );
+$new['turnSeat'] = $table['turnSeat'] = $this->tableMrg->getSeatNext( $seatId );
 //上把出牌人
 $new['lastCall'] = $table['lastCall'] = $seatId;
 //上把出牌内容
@@ -100,27 +100,7 @@ $new['lastCards'] = $table['lastCards'] = $sendCards;
 $new['noFollow'] = $table['noFollow'] = 0;
 
 //更新牌桌信息
-$res = $this->model->setTableInfo( $tableId, $new );
-
-// 新版活动任务
-/* $_num = in_array($cardstype['type'], array('88','99'))?'88':(in_array($cardstype['type'], array('8','9','10'))?'8910':($cardstype['type']=='7'?('7'.count($sendCards)):''));
-if ( !$_num ) {
-	if ( $cardstype['type']==1 ) {
-		$_send = $sendCards[0];
-		$_num = in_array($_send, array('12','22','32','42')) ? '1_2' : '';
-	}
-}
-if ( $_num ) {
-	$userinfo = $user;
-	$tesk = new tesk($this->mysql, $this->redis, $accode, $action);
-	$adduinfo = $tesk->execute('user_pct_'.$_num, $userinfo, array(), 1, $table);
-	if ( $adduinfo ) {
-		$res = $this->model->incUserInfo($uid, $adduinfo, 6);//6任务直奖
-		$res && $userinfo = array_merge($userinfo, $res);
-	}
-	$user = $userinfo;
-	
-}   */
+$res = $this->tableMgr->setTableInfo( $tableId, $new );
 
 //检测手牌已经出完，执行GAME_OVER，并return
 if ( count( $table['seat'.$seatId.'cards']) == 0 )

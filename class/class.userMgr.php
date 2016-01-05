@@ -75,15 +75,17 @@ class userMgr
 
     public function initUser(& $arrUser)
     {
-        $arrUser['isInGame']    = false ;
+        $arrUser['isInGame']    = false;
         $arrUser['modelID']     = 0;
         $arrUser['roomID']      = 0;
         $arrUser['tableID']     = 0;
         $arrUser['coins']       = 10000;
         $arrUser['tablePos']    = 0;
-        $arrUser['fd']    = 0;
-        $arrUser['isRobot']    = 0;
-        $arrUser['gameIds']    = array();
+        $arrUser['fd']          = 0;
+        $arrUser['isRobot']     = 0;
+        $arrUser['gameIds']     = array();
+        $arrUser['gameingId']   = 0;
+        $arrUser['state']       = 0;
     }
 
     //判断用户是否报名了该场次比赛

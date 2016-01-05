@@ -10,6 +10,7 @@ require_once ROOT."/class/class.userMgr.php";
 require_once ROOT."/class/class.roomMgr.php";
 require_once ROOT."/class/class.model.php";
 require_once ROOT."/class/class.card.php";
+require_once ROOT."/class/class.tableMgr.php";
 
 class gamer
 {
@@ -18,6 +19,7 @@ class gamer
     public $userMgr = null;
     public $roomMgr = null;
     public $model  = null;
+    public $tableMgr  = null;
 
     function __construct($rd, $mq)
     {
@@ -26,6 +28,7 @@ class gamer
         $this->userMgr = new userMgr($rd,$mq);
         $this->roomMgr = new roomMrg($rd,$mq);
         $this->model = new model($rd,$mq);
+        $this->tableMgr = new TableMgr($rd,$mq ,$this->roomMgr);
     }
 
     public function runLogin($fd, $data)
@@ -39,7 +42,17 @@ class gamer
          }
          else  //用户名密码正确
          {
-             $this->userMgr->initUser($user);
+             $r_user = $this->userMgr->getUserInfo($uid) ;
+             if( $r_user )
+             {
+                 //检查用户报名的比赛信息 todo
+                 $user = array_merge($r_user,$user );
+             }
+             else
+             {
+                 $this->userMgr->initUser($user);
+             }
+
              $user['fd']  = $fd ;
              $this->userMgr->setFdUid($fd,$uid);
              $this->userMgr->setUserInfo($uid,$user);
@@ -68,7 +81,6 @@ class gamer
                 "verfile" => 0,
                 "vertips" => 0,
                 "mail_unread" => 0,
-                "coupon" => 0,
                 "contact"=> "qq123456",
                 "contacts"=> "qq123456",
                 "wechat"=> "adfadfad",
@@ -77,6 +89,11 @@ class gamer
          }
         return $user;
         //sendToFd(1,1,null);
+    }
+
+    public function runLogout()
+    {
+
     }
 
     public function runAction( $fd, $cmd, $code, $action, $params=array(), $user=array() )
@@ -111,12 +128,6 @@ class gamer
         }
     }
 
-
-    private function traveTables($gameConfig)
-    {
-
-    }
-
     //游戏退出时完成清理及保存工作
     public function gameOver()
     {
@@ -144,6 +155,7 @@ class gamer
         $gameId = $game['gameId'];
 
         $gameplayall = $this->roomMgr->getModelGamePlayAll($gamesId);
+
         if ( !$gameplayall ) { return false; }
 
         //生成下一场
@@ -157,19 +169,26 @@ class gamer
         //检查玩家是否已经在其他比赛
         foreach( $gameplayall as $u )
         {
-            
+
         }
         //踢出多余玩家
         $arr = array_chunk($gameplayall,$game['gamePersonAll'], true);
-        $gameplay = $arr[0];
+        $gameplay = $gameplayall;
 
         //赛事赛场开始
         $game['gameStart'] = time();
         //保存赛场信息
-        $res = $this->model->setModelGame($modelId,$roomId,$weekId,$gameId,$game);
-        //赛事随机组桌
+        $res = $this->roomMgr->setRoomGame($roomId,$gamesId,$game,$modelId);
 
+        //赛事随机组桌
         shuffle($gameplay);
+
+        $gameplay[1] = $gameplay[0];
+        $gameplay[1]['uid'] = 4;
+        $gameplay[2] = $gameplay[0];
+        $gameplay[2]['uid'] = 3;
+
+        var_dump($gameplayall);
         $i=0;
 
         foreach ( $gameplay as $k=>$v )
@@ -180,7 +199,7 @@ class gamer
             if ( !($i%3) )
             {
                 //使用真实roomId，伪造的为roomMock
-                $table = $this->model->iniTableInfo($game['roomReal'],$players,$modelId,$roomId,$weekId,$gameId);
+                $table = $this->tableMgr->iniTableInfo($roomId,$players,$modelId,$roomId,$weekId,$gameId);
                 if ( !$table )
                 {
                     gerr("赛场新桌无效[$gamesId] table=".json_encode($table)." players=".json_encode($players));
@@ -198,6 +217,8 @@ class gamer
                 }
                 else
                 {
+                    echo "----------------------------------\n";
+                    //var_dump( $table );
                     $tableId = $table['tableId'];
                    // debug("赛场新桌新局[$gamesId|$tableId]");
                     $this->ACT_MODEL_READY($table, 1);
@@ -227,7 +248,7 @@ class gamer
         $data['modelId'] = $modelId;
         $data['weekId'] = $weekId;			//场次编号(年+周)
         $data['gameId'] = $gameId;			//场次编号(本周第n次)
-        $res = $this->model->sendToTable($table, $cmd, $code, $data, __LINE__);
+        $res = $this->tableMgr->sendToTable($table, $cmd, $code, $data, __LINE__);
         //加事务锁 场次变动
         $lockId = 'GAMESID_'.$gamesId;
         $res = setLock($lockId);
@@ -236,9 +257,9 @@ class gamer
             return false;
         }
         //标记赛事牌桌
-        $game = $this->model->getModelGame($modelId,$roomId,$weekId,$gameId);
+        $game = $this->roomMgr->getRoomGame( $roomId,$gamesId,$modelId );
         $game['tableIds'][$tableId] = 1;
-        $res = $this->model->setModelGame($modelId,$roomId,$weekId,$gameId,$game);
+        $res = $this->roomMgr->setRoomGame($roomId,$gamesId,$game,$modelId);
         //解事务锁 场地变动
         $res = delLock($lockId);
         $this->ACT_MODEL_ROOMIN($table, $is_new);
@@ -278,7 +299,8 @@ class gamer
             $data['coins'] = $table["seat{$seatId}coins"];
             $data['score'] = $table["seat{$seatId}score"];
             $player = array('fd'=>$table["seat{$seatId}fd"], 'uid'=>$uid, 'tableId'=>$tableId);
-            $res = $this->model->sendToPlayer($player, $cmd, $code, $data,0);
+            var_dump($player);
+            $res = $this->tableMgr->sendToPlayer($player, $cmd, $code, $data,0);
 
         }
         //事件 - 牌桌开始
@@ -289,7 +311,7 @@ class gamer
         $hostId = $table['hostId'];
 
         setTimer(1,$sceneId, $act, $params, $delay,$hostId);
-
+        echo "ACT_MODEL_ROOMIN end \n";
     }
 
     //事件 - 准备开打
@@ -304,7 +326,7 @@ class gamer
         //执行事件
         else {
             $tableId = $table['tableId'];
-            $table = $this->model->getTableInfo($tableId);
+            $table = $this->tableMgr->getTableInfo($tableId);
             if ( !$table ) {
                 gerr("牌桌开打无效[$tableId]");
                 return false;
@@ -312,7 +334,7 @@ class gamer
             $newT = array();
             foreach ( $table['seats'] as $uid=>$seatId )
             {
-                $user = $this->model->getUserInfo($uid);
+                $user = getUser($uid);
                 $fd = $user ? $user['fd'] : 0;
                 if ( $table["seat{$seatId}fd"] != $fd ) {
                     $newT["seat{$seatId}fd"] = $table["seat{$seatId}fd"] = $fd;
@@ -323,11 +345,11 @@ class gamer
         $roomId = $table['roomId'];
         $isNewgame = $table['isNewGame'];
         //清除打牌历史
-        $this->model->delTableHistory($tableId);
+        //$this->model->delTableHistory($tableId);
         //更新牌桌状态及是否新局
         $newT['state'] = $table['state'] = $state;
         $newT['gameStart'] = $table['gameStart'] = time();
-        $res = $this->model->setTableInfo($tableId, $newT);
+        $res = $this->tableMgr->setTableInfo($tableId, $newT);
         if ( !$res ) {
             gerr("牌桌开打失败[$tableId] newT=".json_encode($newT));
             return false;
@@ -340,7 +362,7 @@ class gamer
                 $code = 1001;
                 $player = array('uid'=>$uid, 'fd'=>$table["seat{$seatId}fd"], 'tableId'=>$tableId);
                 $data = array();
-                $res = $this->model->sendToUser($player, $cmd, $code, $data,0);
+                $res = $this->tableMgr->sendToPlayer($player, $cmd, $code, $data,0);
             }
         }
         if ( $isNewgame ) {
@@ -398,7 +420,7 @@ class gamer
         {
             $data['seatId'] = $seatId;
             $player = array('uid'=>$uid, 'fd'=>$table["seat{$seatId}fd"], 'tableId'=>$tableId);
-            $res = $this->model->sendToPlayer($player, $cmd, $code, $data,0);
+            $res = $this->tableMgr->sendToPlayer($player, $cmd, $code, $data,0);
         }
         //执行洗牌发牌
         $res = $this->GAME_SHUFFLE($table);
@@ -431,7 +453,7 @@ class gamer
         $data['rateId'] = 0;
         $data['rate_num'] = 1;
         $data['rate'] = $table['rate'];
-        $res = $this->model->sendToTable($table, $cmd, $code, $data, __LINE__);
+        $res = $this->tableMgr->sendToTable($table, $cmd, $code, $data, __LINE__);
         //确定谁先叫庄
         $new['turnSeat'] = $table['turnSeat'] = ( $table['turnSeat'] == 4 ? mt_rand(0,2) : $table['turnSeat'] );
         //确定底牌(地主牌)
@@ -453,7 +475,7 @@ class gamer
                 $data['rate'] = $rate_showcard;
                 $data['showCardId'] = $seatId;
                 $data['showCardInfo'] = $cardPool[$seatId];
-                $res = $this->model->sendToTable($table, $cmd, $code, $data, __LINE__);
+                $res = $this->tableMgr->sendToTable($table, $cmd, $code, $data, __LINE__);
 
                 $data_['showCard'][$seatId] = 1;
                 $data_['showCardInfo'][$seatId] = $cardPool[$seatId];
@@ -468,7 +490,7 @@ class gamer
             $new['rate'] = $new['rate_'] = $table['rate'] = $table['rate_'] = $this->TABLE_NEW_RATE( $table, $seatId, $rate_showcard );
         }
         //更新牌桌数据
-        $res = $this->model->setTableInfo( $tableId, $new );
+        $res = $this->tableMgr->setTableInfo( $tableId, $new );
         if ( !$res ) {
             gerr("牌桌发牌失败[$tableId] new=".json_encode($new));
             return false;
@@ -479,15 +501,9 @@ class gamer
         $code = 1005;
         foreach( $table['seats'] as $uid => $seatId )
         {
-            /*if ( ISPRESS || $table["seat{$seatId}robot"] )
-            {	//压测/外挂专用代码: 三家牌面发到用户
-                $data_['seat0cards'] = $table['seat0cards'];
-                $data_['seat1cards'] = $table['seat1cards'];
-                $data_['seat2cards'] = $table['seat2cards'];
-            }  */
             $data_['myCard'] = $table["seat{$seatId}cards"];
             $player = array('fd'=>$table["seat{$seatId}fd"], 'uid'=>$uid, 'tableId'=>$tableId);
-            $res = $this->model->sendToPlayer($player, $cmd, $code, $data_,0);
+            $res = $this->tableMgr->sendToPlayer($player, $cmd, $code, $data_,0);
         }
         //事件 - 邀请叫庄
         $sceneId = $tableId;
@@ -511,7 +527,7 @@ class gamer
         //执行事件
         else {
             $tableId = $table['tableId'];
-            $table = $this->model->getTableInfo($tableId);
+            $table = $this->tableMgr->getTableInfo($tableId);
             if ( !$table ) {
                 gerr("轮叫牌桌无效[?|?|$tableId|?]");
                 return false;
@@ -519,13 +535,13 @@ class gamer
             $newT = array();
             foreach ( $table['seats'] as $uid=>$seatId )
             {
-                $user = $this->model->getUserInfo($uid);
+                $user = getUser($uid);
                 $fd = $user ? $user['fd'] : 0;
                 if ( $table["seat{$seatId}fd"] != $fd ) {
                     $newT["seat{$seatId}fd"] = $table["seat{$seatId}fd"] = $fd;
                 }
             }
-            $newT && $this->model->setTableInfo($tableId, $newT);
+            $newT && $this->tableMgr->setTableInfo($tableId, $newT);
         }
         $seatId = $table['turnSeat'];
         $fd = $table["seat{$seatId}fd"];
@@ -534,7 +550,7 @@ class gamer
         if ( $table['state'] != $state )
         {
             $table['state'] = $state;
-            $res = $this->model->setTableState($tableId, $state);
+            $res = $this->tableMgr->setTableState($tableId, $state);
             if ( !$res ) {
                 gerr("轮叫状态失败[$fd|$uid|$tableId|$seatId] setTableState=$state");
                 return false;
@@ -562,7 +578,7 @@ class gamer
         $data = array(
             'callId'=>$seatId,
         );
-        $res = $this->model->sendToTable($table, $cmd, $code, $data, __LINE__);
+        $res = $this->tableMgr->sendToTable($table, $cmd, $code, $data, __LINE__);
         return true;
     }
 
@@ -589,7 +605,7 @@ class gamer
            // if ( ISTESTS ) $beLord = 1;
         }
         //获取牌桌
-        $table = $this->model->getTableInfo($tableId);
+        $table = $this->tableMgr->getTableInfo($tableId);
         if ( !$table ) {
             $fd = $user ? $user['fd'] : "?";
             $uid = $user ? $user['uid'] : "?";
@@ -609,7 +625,7 @@ class gamer
         $old_rate_ = $table['rate_'];
         //执行叫庄，获取最新牌桌数据
         $tableOld = $table;
-        $table = $this->model->call_lord($tableOld, $beLord);
+        $table = $this->tableMgr->call_lord($tableOld, $beLord);
         if ( !$table ) {
             gerr("叫庄执行失败[$fd|$uid|$tableId|$seatId] call_lord( ".json_encode($tableOld).", $beLord )");
             return false;
@@ -629,7 +645,7 @@ class gamer
             'beLordId'=>$seatId,
             'beLordInfo'=>$beLord,
         );
-        $res = $this->model->sendToTable($table, $cmd, $code, $data, __LINE__);
+        $res = $this->tableMgr->sendToTable($table, $cmd, $code, $data, __LINE__);
         //通知牌桌: 有倍率变化
         if ( $table['rate_'] > $old_rate_ )
         {
@@ -640,7 +656,7 @@ class gamer
                 'rate_num'=>intval($table['rate_'] / $old_rate_),
                 'rate'=>$table['rate_'],
             );
-            $res = $this->model->sendToTable($table, $cmd, $code, $data, __LINE__);
+            $res = $this->tableMgr->sendToTable($table, $cmd, $code, $data, __LINE__);
         }
         //检查牌桌状态
         echo "AUTO_CALL_LORD table state {$table['state']} \n";
@@ -684,7 +700,7 @@ class gamer
         if ( $table['state'] != $state )
         {
             $table['state'] = $state;
-            $res = $this->model->setTableState($tableId, $state);
+            $res = $this->tableMgr->setTableState($tableId, $state);
             if ( !$res ) {
                 gerr("轮抢执行失败[$fd|$uid|$tableId|$seatId] state=$state");
                 return false;
@@ -706,7 +722,7 @@ class gamer
         $data = array(
             'callId'=>$seatId,
         );
-        $res = $this->model->sendToTable($table, $cmd, $code, $data, __LINE__);
+        $res = $this->tableMgr->sendToTable($table, $cmd, $code, $data, __LINE__);
         return true;
     }
 
@@ -732,7 +748,7 @@ class gamer
             //if ( ISTESTS ) $beLord = 1;
         }
         //获取牌桌
-        $table = $this->model->getTableInfo($tableId);
+        $table = $this->tableMgr->getTableInfo($tableId);
         if ( !$table ) {
             $fd = $user ? $user['fd'] : "?";
             $uid = $user ? $user['uid'] : "?";
@@ -751,7 +767,7 @@ class gamer
         $old_rate_ = $table['rate_'];
         //执行抢庄，获取最新牌桌数据
         $tableOld = $table;
-        $table = $this->model->grab_lord($tableOld, $beLord);
+        $table = $this->tableMgr->grab_lord($tableOld, $beLord);
         if ( !$table ) {
             gerr("抢庄执行失败[$fd|$uid|$tableId|$seatId] grab_lord( ".json_encode($tableOld).", $beLord )");
             return false;
@@ -771,7 +787,7 @@ class gamer
             'grabLordId'=>$seatId,
             'grabLordInfo'=>$beLord,
         );
-        $res = $this->model->sendToTable($table, $cmd, $code, $data, __LINE__);
+        $res = $this->tableMgr->sendToTable($table, $cmd, $code, $data, __LINE__);
         //通知牌桌: 有倍率变化
         if ( $table['rate_'] > $old_rate_ )
         {
@@ -782,7 +798,7 @@ class gamer
                 'rate_num'=>intval($table['rate_'] / $old_rate_),
                 'rate'=>$table['rate_'],
             );
-            $res = $this->model->sendToTable($table, $cmd, $code, $data, __LINE__);
+            $res = $this->tableMgr->sendToTable($table, $cmd, $code, $data, __LINE__);
         }
         //检查牌桌状态
         if ( $table['state'] == 5 )
@@ -812,7 +828,7 @@ class gamer
         $uid = $table["seat{$seatId}uid"];
         //更新牌桌状态
         $table['state'] = $state;
-        $res = $this->model->setTableState($tableId, $state);
+        $res = $this->tableMgr->setTableState($tableId, $state);
         if ( !$res ) {
             gerr("定庄执行失败[$fd|$uid|$tableId|$seatId] table＝".json_encode($table));
             return false;
@@ -841,12 +857,12 @@ class gamer
                 $data['lordShowCard'] = $table["seat{$seatId}cards"];
             }
             $player = array('fd'=>$table["seat{$_seatId}fd"], 'uid'=>$_uid, 'tableId'=>$tableId);
-            $res = $this->model->sendToPlayer($player, $cmd, $code, $data);
+            $res = $this->tableMgr->sendToPlayer($player, $cmd, $code, $data);
         }
         //通知牌桌: 底牌导致倍率变更(即使倍率没变化也要通知)
         $newT['rate'] = $table['rate'] = $this->TABLE_NEW_RATE($table, $seatId, $data['lordBonus']);
         //更新牌桌信息
-        $res = $this->model->setTableInfo($tableId, $newT);
+        $res = $this->tableMgr->setTableInfo($tableId, $newT);
         if ( !$res ) {
             gerr("定庄执行失败[$fd|$uid|$tableId|$seatId] client-".__LINE__." rate=".$table['rate']);
             return false;
@@ -879,7 +895,7 @@ class gamer
         $data = array(
             'callId'=>$seatId,
         );
-        $res = $this->model->sendToTable($table, $cmd, $code, $data, __LINE__);
+        $res = $this->tableMgr->sendToTable($table, $cmd, $code, $data, __LINE__);
         return true;
     }
 
@@ -896,7 +912,7 @@ class gamer
         $tableId = $params['tableId'];
         $seatId = $params['seatId'];
         //获取牌桌
-        $table = $this->model->getTableInfo($tableId);
+        $table = $this->tableMgr->getTableInfo($tableId);
         if ( !$table ) {
             gerr("机打牌桌无效[?|?|$tableId|$seatId]");
             return false;
@@ -979,7 +995,7 @@ class gamer
             $data['callId'] = $seatId;
             $data['sendCards'] = $sendCards;
             $data['cardType'] = intval($cardstype['type']);
-            $res = $this->model->sendToTable($table, $cmd, $code, $data, __LINE__);
+            $res = $this->tableMgr->sendToTable($table, $cmd, $code, $data, __LINE__);
             //检测牌型是否影响倍率
             $rate = isset( $GAME['rate_cardstype'.intval( $cardstype['type'])]) ? $GAME['rate_cardstype'.intval( $cardstype['type'])] : 1;
             if ( $rate > 1 ) {
@@ -992,7 +1008,7 @@ class gamer
             //记录出牌次数，用于春天/反春判定
             $new['seat'.$seatId.'sent'] = ++$table['seat'.$seatId.'sent'];
             //轮转下家
-            $new['turnSeat'] = $table['turnSeat'] = $this->model->getSeatNext($seatId);
+            $new['turnSeat'] = $table['turnSeat'] = $this->tableMgr->getSeatNext($seatId);
             //上把出牌人
             $new['lastCall'] = $table['lastCall'] = $seatId;
             //上把出牌内容
@@ -1000,7 +1016,7 @@ class gamer
             //重设不跟次数
             $new['noFollow'] = $table['noFollow'] = 0;
             //更新牌桌信息
-            $res = $this->model->setTableInfo($tableId, $new);
+            $res = $this->tableMgr->setTableInfo($tableId, $new);
             if ( !$res ) {
                 gerr("机打执行失败[$fd|$uid|$tableId|$seatId] new=".json_encode($new));
                 return false;
@@ -1025,7 +1041,7 @@ class gamer
         $cmd = 5; $code = 1018;
         $data = array();
         $data['callId'] = $seatId;
-        $res = $this->model->sendToTable($table, $cmd, $code, $data, __LINE__);
+        $res = $this->tableMgr->sendToTable($table, $cmd, $code, $data, __LINE__);
         //重设不跟次数
         $new['noFollow'] = ++$table['noFollow'];
         //清空叫牌内容
@@ -1034,9 +1050,9 @@ class gamer
             $new['lastCards'] = $table['lastCards'] = array();
         }
         //轮转下家
-        $new['turnSeat'] = $table['turnSeat'] = $this->model->getSeatNext($seatId);
+        $new['turnSeat'] = $table['turnSeat'] = $this->tableMgr->getSeatNext($seatId);
         //更新牌桌信息
-        $res = $this->model->setTableInfo($tableId, $new);
+        $res = $this->tableMgr->setTableInfo($tableId, $new);
         if ( !$res ) {
             gerr("机打执行失败[$fd|$uid|$tableId|$seatId] new=".json_encode($new));
             return false;
@@ -1056,14 +1072,14 @@ class gamer
         $cmd = 5; $code = 1028;
         $data = array();
         $data['trustId'] = $seatId;
-        $res = $this->model->sendToTable($table, $cmd, $code, $data, __LINE__);
+        $res = $this->tableMgr->sendToTable($table, $cmd, $code, $data, __LINE__);
         //设置托管状态		//state: 0没有托管1主动托管2延时托管3退房托管4掉线托管
         $newT["seat{$seatId}trust"] = $table["seat{$seatId}trust"] = $state;
         if ( $state == 3 || $state == 4 ) {	//退房托管或掉线托管时，不向用户发送牌桌消息
             $newT["seat{$seatId}fd"] = $table["seat{$seatId}fd"] = 0;
         }
         //更新牌桌信息
-        $res = $this->model->setTableInfo($tableId, $newT);
+        $res = $this->tableMgr->setTableInfo($tableId, $newT);
         if ( !$res ) {
             gerr("用户托管失败[$fd|$uid|$tableId|$seatId] state=".$table["seat{$seatId}trust"]."->".$state);
             return false;
@@ -1089,11 +1105,11 @@ class gamer
         $cmd = 5; $code = 1029;
         $data = array();
         $data['trustId'] = $seatId;
-        $res = $this->model->sendToTable($table, $cmd, $code, $data, __LINE__);
+        $res = $this->tableMgr->sendToTable($table, $cmd, $code, $data, __LINE__);
         //设置解托状态
         $newT["seat{$seatId}trust"] = $state;
         //更新牌桌信息
-        $res = $this->model->setTableInfo($tableId, $newT);
+        $res = $this->tableMgr->setTableInfo($tableId, $newT);
         if ( !$res ) {
             gerr("用户解托失败[$fd|$uid|$tableId|$seatId] state=$state");
             return false;
@@ -1126,13 +1142,13 @@ class gamer
         echo "MODEL_GAME_OVER mid \n";
         //更新牌桌状态
         $newT['state'] = $table['state'] = $state;
-        $res = $this->model->setTableState($tableId, $state);
+        $res = $this->tableMgr->setTableState($tableId, $state);
         //debug("赛桌结算开始[$gamesId|$tableId]");
         //地主赢/农民赢、春天/反春
         $isLordwin = $isLordspring = $isBoorspring = 0;
         if ( $winner == $lordId ) {
             $isLordwin = 1;
-            $isLordspring = intval(!$table["seat".$this->model->getSeatNext($winner)."sent"] && !$table["seat".$this->model->getSeatNext($this->model->getSeatNext($winner))."sent"]);
+            $isLordspring = intval(!$table["seat".$this->tableMgr->getSeatNext($winner)."sent"] && !$table["seat".$this->tableMgr->getSeatNext($this->tableMgr->getSeatNext($winner))."sent"]);
         } else {
             $isLordwin = 0;
             $isBoorspring = intval($table["seat{$lordId}sent"]==1 && in_array(0, array($table['seat0sent'],$table['seat1sent'],$table['seat2sent'])));
@@ -1149,16 +1165,16 @@ class gamer
         $data['total'] = array( "0"=>0, "1"=>0, "2"=>0 );
         $data['coins'] = array( "0"=>$table["seat0coins"], "1"=>$table["seat1coins"], "2"=>$table["seat2coins"] );
         if ( $isLordwin ) {
-            $next = $this->model->getSeatNext($lordId);
+            $next = $this->tableMgr->getSeatNext($lordId);
             $data['scoreTotal'][$next] = -1 * min($total, $table["seat{$next}score"]);
-            $prev = $this->model->getSeatNext($next);
+            $prev = $this->tableMgr->getSeatNext($next);
             $data['scoreTotal'][$prev] = -1 * min($total, $table["seat{$next}score"]);
             $data['scoreTotal'][$lordId] = 2 * $total;//竞技场不存在输光因素
         } else {
             $data['scoreTotal'][$lordId] = -1 * min(2 * $total, $table["seat{$lordId}score"]);
-            $next = $this->model->getSeatNext($lordId);
+            $next = $this->tableMgr->getSeatNext($lordId);
             $data['scoreTotal'][$next] = $total;//竞技场不存在输光因素
-            $prev = $this->model->getSeatNext($next);
+            $prev = $this->tableMgr->getSeatNext($next);
             $data['scoreTotal'][$prev] = $total;//竞技场不存在输光因素
         }
         $users = array();
@@ -1177,7 +1193,7 @@ class gamer
         $seat_score = $data['score'];
         //通知牌桌: 开始结算
         $cmd = 5; $code = 1014;
-        $res = $this->model->sendToTable($table, $cmd, $code, $data, __LINE__);
+        $res = $this->tableMgr->sendToTable($table, $cmd, $code, $data, __LINE__);
         //处理牌桌玩家数据
         foreach( $seat_score as $seatId => $val )
         {
@@ -1196,7 +1212,7 @@ class gamer
             $newT["seat{$seatId}score"] = $table["seat{$seatId}score"] = $val;
         }
         $newT['seat_score'] = $table['seat_score'] = $seat_score;
-        $newT && $this->model->setTableInfo($tableId, $newT);unset($newT);
+        $newT && $this->tableMgr->setTableInfo($tableId, $newT);unset($newT);
 
         //事件 - 场赛结束
         $sceneId = $tableId;
@@ -1219,7 +1235,7 @@ class gamer
         echo "MODEL_GAME_DONE beg \n";
 
         $tableId = $params['tableId'];
-        $table = $this->model->getTableInfo($tableId);
+        $table = $this->tableMgr->getTableInfo($tableId);
         if (!$tableId || !$table) {
             gerr("赛结牌桌无效[$tableId] table=" . json_encode($table));
             return false;
@@ -1250,7 +1266,7 @@ class gamer
         $data['rateId'] = $seatId;
         $data['rate_num'] = $rate_num;
         $data['rate'] = $rate;
-        $res = $this->model->sendToTable($table, $cmd, $code, $data, __LINE__);
+        $res = $this->tableMgr->sendToTable($table, $cmd, $code, $data, __LINE__);
         return $rate;
     }
 

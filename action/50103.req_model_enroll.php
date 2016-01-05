@@ -13,9 +13,6 @@ $weekId = intval(date("Ymd",time()-(date("N")-1)*86400));
 $now = time();
 
 //获取本周最新场次
-//$game = $this->model->getModelRoomWeekGameLast($modelId,$roomId,$weekId);
-//$gameId = isset($game["gamesId"]) ? $game["gamesId"] : "";
-
 $game = $this->roomMgr->getModelRoomWeekGameLast($modelId,$roomId,$weekId);
 $gameId = isset($game["gamesId"]) ? $game["gamesId"] : "";
 $uid = isset($user["uid"]) ? $user["uid"] : "";
@@ -24,6 +21,8 @@ echo "gameid " . $gameId . "\n";
 
 //判断用户是否报名了
 $bHasSignUp =  $this->userMgr->hasSignUp($uid, $gameId) ;
+
+goto test;
 
 if( $bHasSignUp)
 {
@@ -40,6 +39,7 @@ if( ! $this->roomMgr->canSignUp($roomId, $gameId ) )
 	goto end;
 }
 
+test:
 //通知用户: 赛事报名
 $data = array(
 	"errno" => 0,
@@ -63,24 +63,8 @@ $this->userMgr->addGameId($uid ,$gameNew["gamesId"]);
 
 echo "baoming  \n";
 echo $gameNew["gamePerson"] . "  / " . $gameNew["gamePersonAll"]. "\n";
-if( $gameNew["gamePerson"] >= $gameNew["gamePersonAll"] )
+//if( $gameNew["gamePerson"] >= $gameNew["gamePersonAll"] )
 	$this->ACT_MODEL_CHECK($gameNew);
 
-/*
-if(  $gameNew['gamePerson'] >= $gameNew['gamePersonAll'] )
-{
-	echo "222222222222222222222222222\n";
-	$this->ACT_MODEL_CHECK($gameNew);
-} */
-//检查报名是否已满
-/*
-if ( $gameNew['gamePerson'] >= $gameNew['gamePersonAll'] )
-{
-	$this->ACT_MODEL_CHECK($gameNew);
-}
-
-//解事务锁
-$res = delLock($lockId);
- */
 
 end:{}
